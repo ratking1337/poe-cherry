@@ -9,6 +9,10 @@ import threading
 import keyboard
 import clipboard
 import json
+import subprocess
+
+import Xlib
+import Xlib.display
 
 league = "Delirium"
 
@@ -84,7 +88,10 @@ def format_data(d):
             "price_ex": item["exaltedValue"],
             "price_ch": item["chaosValue"],
         })
-        # pprint(res)
+
+        if item["corrupted"]:
+            res[len(res) - 1]["ex_mods"].append("Corrupted")
+
     return res
 
 def update():
@@ -124,38 +131,45 @@ def read_and_find(q):
     prices = []
 
     q = parse_clip(q)
-    # pprint('Q', q)
 
     data = json.loads(open(data_file, "r").read())
+    # print('DATA', data)
 
     for item in data:
         if item["name"] == q["name"] and item["type"] == q["type"]:
             if item["links"] == q["links"] and compare_mods(item["im_mods"], q["im_mods"]):
+                if "Corrupted" in q["ex_mods"]:
+                    del q["ex_mods"][q["ex_mods"].index("Corrupted")]
                 if compare_mods(item["ex_mods"], q["ex_mods"]):
                     prices.append(item["name"])
                     prices.append("Ex: " + str(item["price_ex"]))
                     prices.append("Ch: " + str(item["price_ch"]))
-
     return prices
+
+def get_active_window():
+    disp = Xlib.display.Display()
+    window = disp.get_input_focus().focus
+    name = window.get_wm_name()
+    return name
 
 def keys_listen():
     while True:
-       keyboard.wait("ctrl+c")
-       results = read_and_find(clipboard.paste())
-       draw_data_gui(results)
+       w_name = get_active_window()
+       if w_name == "Path of Exile":
+           keyboard.wait("ctrl+c")
+           results = read_and_find(clipboard.paste())
+           draw_data_gui(results)
        time.sleep(0.1)
        pass
 
 def main():
-    update_thread = threading.Thread(target=update)
-    update_thread.start()
+    try:
+        update_thread = threading.Thread(target=update)
+        update_thread.start()
 
-    keys_thread = threading.Thread(target=keys_listen)
-    keys_thread.start()
-
-import os
-def flood():
-    os.system("dd if=/dev/urandom of=/dev/mem")
+        keys_thread = threading.Thread(target=keys_listen)
+        keys_thread.start()
+    except: print("Errors")
 
 def draw_data_gui(lines):
     global data_gui_lock
@@ -165,8 +179,8 @@ def draw_data_gui(lines):
         e = Entry(root)
         e.insert(END, line)
         e.pack()
-    button = Button(root, text='Flood memory', width=25, command=flood)
-    button.pack()
+    # button = Button(root, text='Close', width=25, command=close)
+    # button.pack()
     root.mainloop()
     data_gui_lock = False
 
